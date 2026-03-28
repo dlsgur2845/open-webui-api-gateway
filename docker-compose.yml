@@ -1,0 +1,68 @@
+services:
+  # ──────────────────────────────────────────────
+  # PostgreSQL — open-webui와 Gateway가 공유
+  # ──────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ──────────────────────────────────────────────
+  # Open-WebUI
+  # ──────────────────────────────────────────────
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${DB_USERNAME}:${DB_PASSWORD}@postgres:${DB_PORT}/${DB_NAME}
+      WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY}
+    volumes:
+      - open-webui-data:/app/backend/data
+    ports:
+      - "8080:8080"
+
+  # ──────────────────────────────────────────────
+  # API Gateway
+  # ──────────────────────────────────────────────
+  api-gateway:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      open-webui:
+        condition: service_started
+    environment:
+      # DB 연결 — docker 네트워크에서는 서비스명으로 접근
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:${DB_PORT}/${DB_NAME}
+
+      # Gateway 설정
+      GATEWAY_JWT_SECRET: ${GATEWAY_JWT_SECRET}
+      GATEWAY_JWT_EXPIRES_IN_FALLBACK: ${GATEWAY_JWT_EXPIRES_IN_FALLBACK}
+
+      # Open-WebUI 연결 — docker 네트워크 내부 주소
+      OPENWEBUI_URL: http://open-webui:8080
+      WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY}
+    ports:
+      - "9090:9090"
+
+volumes:
+  postgres-data:
+  open-webui-data:

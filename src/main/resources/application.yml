@@ -1,0 +1,71 @@
+server:
+  port: 9090
+
+spring:
+  application:
+    name: open-webui-api-gateway
+
+  # ──────────────────────────────────────────────
+  # Open-WebUI와 동일한 PostgreSQL 데이터베이스
+  # ──────────────────────────────────────────────
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/open_webui}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: none          # open-webui 소유 테이블이므로 DDL 변경하지 않음
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        default_schema: public
+
+# ──────────────────────────────────────────────
+# Gateway 설정
+# ──────────────────────────────────────────────
+gateway:
+  jwt:
+    # Gateway 자체 JWT 서명 키 (반드시 프로덕션에서 변경)
+    secret: ${GATEWAY_JWT_SECRET:my-gateway-secret-key-change-me-in-production}
+
+    # [만료 주기] 기동 시 DB config 테이블(auth.jwt_expiry)에서 1회 조회하여 캐시.
+    # DB에 값이 없을 때만 이 폴백 값을 사용한다.
+    # open-webui 관리자가 만료 주기를 변경하면 Gateway를 재기동하면 반영됨.
+    expires-in-fallback: ${GATEWAY_JWT_EXPIRES_IN_FALLBACK:4w}
+
+  openwebui:
+    # Open-WebUI 백엔드 URL
+    url: ${OPENWEBUI_URL:http://localhost:8080}
+
+    # Open-WebUI의 WEBUI_SECRET_KEY
+    # ──────────────────────────────────────────
+    # 이 키는 open-webui가 자체 JWT를 서명/검증할 때 사용하는 비밀 키이다.
+    # open-webui의 환경변수 WEBUI_SECRET_KEY 값과 반드시 동일해야 한다.
+    # Gateway는 이 키를 사용하여 open-webui가 신뢰하는 내부 JWT(30초 수명)를
+    # 생성하여 프록시 요청 시 인증에 사용한다.
+    # ──────────────────────────────────────────
+    secret-key: ${WEBUI_SECRET_KEY:t0p-s3cr3t}
+
+# ──────────────────────────────────────────────
+# Actuator
+# ──────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+
+# ──────────────────────────────────────────────
+# 로깅
+# ──────────────────────────────────────────────
+logging:
+  level:
+    root: INFO
+    com.openwebui.gateway: DEBUG
+    com.openwebui.gateway.controller.ProxyController: INFO
